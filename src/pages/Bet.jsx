@@ -62,8 +62,11 @@ const WingoBetting = () => {
     const interval = setInterval(() => {
       setCountdown((prev) => {
         if (prev <= 1) {
+          const currentPeriod = periods[timeSlot];
           let simulatedResult;
-          const latestBet = betList.find(bet => bet.period === periods[timeSlot] && bet.status === "Pending");
+          const latestBet = betList.find(
+            (bet) => bet.period === currentPeriod && bet.status === "Pending"
+          );
 
           if (latestBet) {
             if (latestBet.color === "Green") {
@@ -85,37 +88,64 @@ const WingoBetting = () => {
             simulatedResult = Math.floor(Math.random() * 10); // Random if no bet
           }
 
+          // Add result to gameHistory (only once per period)
           const resultEntry = {
-            period: periods[timeSlot],
+            period: currentPeriod,
             number: simulatedResult,
             bigSmall: simulatedResult >= 5 ? "Big" : "Small",
-            color: simulatedResult === 0 || simulatedResult === 5 ? "Violet" : simulatedResult % 2 === 0 ? "Red" : "Green",
+            color:
+              simulatedResult === 0 || simulatedResult === 5
+                ? "Violet"
+                : simulatedResult % 2 === 0
+                ? "Red"
+                : "Green",
           };
-          setGameHistory((prev) => [resultEntry, ...prev.slice(0, 9)]);
+          setGameHistory((prev) => {
+            // Avoid duplicate results for the same period
+            if (prev.some((entry) => entry.period === currentPeriod)) {
+              return prev;
+            }
+            return [resultEntry, ...prev.slice(0, 9)];
+          });
 
+          // Update bets for the current period
           setBetList((prevBets) => {
+            let walletUpdated = false;
             const updatedBets = prevBets.map((bet) => {
-              if (bet.status === "Pending" && bet.period === periods[timeSlot]) {
+              if (bet.status === "Pending" && bet.period === currentPeriod) {
                 let winnings = 0;
+                let status = "Lost";
 
-                if (bet.color) {
-                  winnings = bet.amount * 2; // 2x for color win
-                }
-                else if (bet.number !== null) {
-                  winnings = bet.amount * 9; // 9x for number win
-                }
-                else if (bet.bigSmall) {
-                  winnings = bet.amount * 2; // 2x for Big/Small win
+                // Check if bet matches result
+                if (
+                  (bet.color && bet.color === resultEntry.color) ||
+                  (bet.number !== null && bet.number === resultEntry.number) ||
+                  (bet.bigSmall && bet.bigSmall === resultEntry.bigSmall)
+                ) {
+                  if (bet.color) {
+                    winnings = bet.amount * 2; // 2x for color win
+                  } else if (bet.number !== null) {
+                    winnings = bet.amount * 9; // 9x for number win
+                  } else if (bet.bigSmall) {
+                    winnings = bet.amount * 2; // 2x for Big/Small win
+                  }
+                  status = "Won";
                 }
 
-                setWallet((prev) => prev + winnings);
-                return { ...bet, status: "Won", winnings };
+                // Update wallet only once
+                if (!walletUpdated && winnings > 0) {
+                  setWallet((prev) => prev + winnings);
+                  walletUpdated = true;
+                }
+
+                return { ...bet, status, winnings };
               }
               return bet;
             });
             return updatedBets;
           });
 
+          // Update period
           const slot = timeSlot;
           const current = periods[slot];
           const nextSeq = parseInt(current.slice(-4)) + 1;
@@ -247,7 +277,7 @@ const WingoBetting = () => {
       setErrorMessage("Balance kam hai");
       return;
     }
-    // Prevent withdrawal if user hasn't recharged (i.e., balance is only from initial ₹10 winnings)
+    // Prevent withdrawal if user hasn't recharged
     if (!hasRecharged) {
       if (amt >= 100 && amt <= 500) {
         setRequiredRecharge(200);
@@ -659,7 +689,115 @@ const WingoBetting = () => {
               </button>
             ))}
           </div>
+          {/* Place Bet Button */}
+          <div className="flex justify-center mt-4">
+            <button
+              onClick={placeBet}
+              className="w-40 bg-blue-600 text-white py-2 rounded-lg font-semibold text-sm hover:bg-blue-700 transition-colors"
+              disabled={isBetLocked}
+            >
+              Place Bet
+            </button>
+          </div>
+          {/* Error Message Display */}
+          {(errorMessage || isBetLocked) && (
+            <div className="text-center text-red-500 mt-2">
+              {errorMessage || "Betting is locked. Please make a withdraw or recharge to unlock 🔓"}
+            </div>
+          )}
         </div>
+      </div>
+
+      {/* Game History Section */}
+      <div className="bg-white p-4 mt-4">
+        <h3 className="text-lg font-bold text-black mb-2">Game History</h3>
+        {gameHistory.length === 0 ? (
+          <p className="text-sm text-gray-500">No results yet.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-black">
+              <thead>
+                <tr className="bg-gray-200">
+                  <th className="p-2 text-left">Period</th>
+                  <th className="p-2 text-center">Number</th>
+                  <th className="p-2 text-center">Color</th>
+                  <th className="p-2 text-center">Big/Small</th>
+                </tr>
+              </thead>
+              <tbody>
+                {gameHistory.map((result, i) => (
+                  <tr key={i} className="border-b">
+                    <td className="p-2">{result.period}</td>
+                    <td className="p-2 text-center">{result.number}</td>
+                    <td className="p-2 text-center">
+                      <span
+                        className={`inline-block w-4 h-4 rounded-full ${
+                          result.color === "Green"
+                            ? "bg-green-500"
+                            : result.color === "Violet"
+                            ? "bg-purple-500"
+                            : "bg-red-500"
+                        }`}
+                      ></span>
+                    </td>
+                    <td className="p-2 text-center">{result.bigSmall}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* Bet History Section */}
+      <div className="bg-white p-4 mt-4">
+        <h3 className="text-lg font-bold text-black mb-2">Bet History</h3>
+        {betList.length === 0 ? (
+          <p className="text-sm text-gray-500">No bets yet.</p>
+        ) : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm text-black">
+              <thead>
+                <tr className="bg-gray-200">
+                  <th className="p-2 text-left">Period</th>
+                  <th className="p-2 text-center">Bet Type</th>
+                  <th className="p-2 text-center">Amount</th>
+                  <th className="p-2 text-center">Status</th>
+                  <th className="p-2 text-center">Winnings</th>
+                </tr>
+              </thead>
+              <tbody>
+                {betList.map((bet, i) => (
+                  <tr key={i} className="border-b">
+                    <td className="p-2">{bet.period}</td>
+                    <td className="p-2 text-center">
+                      {bet.color
+                        ? bet.color
+                        : bet.number !== null
+                        ? `Number ${bet.number}`
+                        : bet.bigSmall}
+                    </td>
+                    <td className="p-2 text-center">₹{bet.amount}</td>
+                    <td className="p-2 text-center">
+                      <span
+                        className={`${
+                          bet.status === "Won"
+                            ? "text-green-500"
+                            : bet.status === "Lost"
+                            ? "text-red-500"
+                            : "text-yellow-500"
+                        } font-semibold`}
+                      >
+                        {bet.status}
+                      </span>
+                    </td>
+                    <td className="p-2 text-center">₹{bet.winnings.toFixed(2)}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
     </div>
   );
