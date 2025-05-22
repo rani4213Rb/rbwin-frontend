@@ -16,7 +16,7 @@ const WingoBetting = () => {
   const [selectedNumber, setSelectedNumber] = useState(null);
   const [bigSmall, setBigSmall] = useState("");
   const [amount, setAmount] = useState(0);
-  const [wallet, setWallet] = useState(10); // Default balance set to ₹10
+  const [wallet, setWallet] = useState(0); // Default balance set to ₹ 0
   const [betList, setBetList] = useState([]);
   const [betCount, setBetCount] = useState(0); // Track number of bets placed
   const [gameHistory, setGameHistory] = useState([]);
